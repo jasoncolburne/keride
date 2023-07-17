@@ -401,9 +401,129 @@ pub(crate) fn interact(
         "a": data.clone()
     });
 
-    let (_, ked) = Saider::saidify(&ked, None, None, None, None)?;
+    let (_, ked) = Saider::saidify(&ked, None, Some(kind), None, None)?;
 
     Serder::new_with_ked(&ked, None, None)
+}
+
+#[allow(unused)]
+fn query(
+    route: &str,
+    reply_route: &str,
+    query: Option<&Value>,
+    version: Option<&Version>,
+    kind: Option<&str>,
+) -> Result<Serder> {
+    let ilk = Ilkage::qry;
+    let version = version.unwrap_or(CURRENT_VERSION);
+    let kind = kind.unwrap_or(Serialage::JSON);
+    let empty_query = dat!({});
+    let query = query.unwrap_or(&empty_query);
+
+    let vs = versify(None, Some(version), Some(kind), Some(0))?;
+
+    let ked = dat!({
+        "v": &vs,
+        "t": ilk,
+        "d": "",
+        "dt": &chrono::Utc::now().format("%+").to_string(),
+        "r": route,
+        "rr": reply_route,
+        "q": query.clone()
+    });
+
+    let (_, ked) = Saider::saidify(&ked, None, Some(kind), None, None)?;
+
+    Serder::new_with_ked(&ked, None, Some(kind))
+}
+
+#[allow(unused)]
+fn reply(
+    route: &str,
+    data: Option<&Value>,
+    version: Option<&Version>,
+    kind: Option<&str>,
+) -> Result<Serder> {
+    let ilk = Ilkage::rpy;
+    let version = version.unwrap_or(CURRENT_VERSION);
+    let kind = kind.unwrap_or(Serialage::JSON);
+    let empty_data = dat!({});
+    let data = data.unwrap_or(&empty_data);
+
+    let vs = versify(None, Some(version), Some(kind), Some(0))?;
+
+    let ked = dat!({
+        "v": &vs,
+        "t": ilk,
+        "d": "",
+        "dt": &chrono::Utc::now().format("%+").to_string(),
+        "r": route,
+        "a": data.clone()
+    });
+
+    let (_, ked) = Saider::saidify(&ked, None, Some(kind), None, None)?;
+
+    Serder::new_with_ked(&ked, None, Some(kind))
+}
+
+#[allow(unused)]
+fn prod(
+    route: &str,
+    reply_route: &str,
+    query: Option<&Value>,
+    version: Option<&Version>,
+    kind: Option<&str>,
+) -> Result<Serder> {
+    let ilk = Ilkage::pro;
+    let version = version.unwrap_or(CURRENT_VERSION);
+    let kind = kind.unwrap_or(Serialage::JSON);
+    let empty_query = dat!({});
+    let query = query.unwrap_or(&empty_query);
+
+    let vs = versify(None, Some(version), Some(kind), Some(0))?;
+
+    let ked = dat!({
+        "v": &vs,
+        "t": ilk,
+        "d": "",
+        "dt": &chrono::Utc::now().format("%+").to_string(),
+        "r": route,
+        "rr": reply_route,
+        "q": query.clone()
+    });
+
+    let (_, ked) = Saider::saidify(&ked, None, Some(kind), None, None)?;
+
+    Serder::new_with_ked(&ked, None, Some(kind))
+}
+
+#[allow(unused)]
+fn bare(
+    route: &str,
+    data: Option<&Value>,
+    version: Option<&Version>,
+    kind: Option<&str>,
+) -> Result<Serder> {
+    let ilk = Ilkage::bar;
+    let version = version.unwrap_or(CURRENT_VERSION);
+    let kind = kind.unwrap_or(Serialage::JSON);
+    let empty_data = dat!({});
+    let data = data.unwrap_or(&empty_data);
+
+    let vs = versify(None, Some(version), Some(kind), Some(0))?;
+
+    let ked = dat!({
+        "v": &vs,
+        "t": ilk,
+        "d": "",
+        "dt": &chrono::Utc::now().format("%+").to_string(),
+        "r": route,
+        "a": data.clone()
+    });
+
+    let (_, ked) = Saider::saidify(&ked, None, Some(kind), None, None)?;
+
+    Serder::new_with_ked(&ked, None, Some(kind))
 }
 
 fn ample(n: u128, f: Option<u128>, weak: Option<bool>) -> Result<u128> {

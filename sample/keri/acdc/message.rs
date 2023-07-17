@@ -1,6 +1,7 @@
 use crate::error::{err, Error, Result};
 use cesride::{counter, Counter, Creder, Sadder};
 
+#[allow(unused)]
 pub(crate) fn messagize_creder(creder: &Creder, proof: &str) -> Result<String> {
     let mut message = String::from_utf8(creder.raw())?;
     if proof.len() % 4 != 0 {

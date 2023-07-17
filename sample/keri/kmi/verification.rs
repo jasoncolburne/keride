@@ -72,6 +72,9 @@ pub(crate) fn verify_key_event(
         }
     }
 
+    // verify digers are indeed digers - this is important
+    let _ = serder.digers()?;
+
     let (verfers, tholder) = if serder.est()? {
         let tholder = if let Some(tholder) = serder.tholder()? {
             tholder

@@ -46,15 +46,9 @@ pub(crate) fn verify_anchor(
     }
 
     let seals = aserder.ked()["a"].to_vec()?;
-    if seals.len() != 1 {
+    if seals.is_empty() {
         return Ok(false);
     }
-
-    let seal = &seals[0];
-
-    let spre = seal["i"].to_string()?;
-    let ssn = seal["s"].to_string()?;
-    let sdig = seal["d"].to_string()?;
 
     if deep.unwrap_or(false) && !verifying.contains(&aserder.said()?) {
         verifying.insert(aserder.said()?);
@@ -78,8 +72,35 @@ pub(crate) fn verify_anchor(
         }
     }
 
-    if ssn == serder.ked()["s"].to_string()? && spre == serder.pre()? && sdig == serder.said()? {
-        return Ok(true);
+    for seal in &seals {
+        let map = seal.to_map()?;
+
+        if map.contains_key("i") {
+            if !serder.ked().to_map()?.contains_key("i") {
+                return Ok(false);
+            }
+
+            let spre = seal["i"].to_string()?;
+            let ssn = seal["s"].to_string()?;
+            let sdig = seal["d"].to_string()?;
+
+            if ssn == serder.ked()["s"].to_string()?
+                && spre == serder.pre()?
+                && sdig == serder.said()?
+            {
+                return Ok(true);
+            }
+        } else {
+            if serder.ked().to_map()?.contains_key("i") {
+                return Ok(false);
+            }
+
+            let sdig = seal["d"].to_string()?;
+
+            if sdig == serder.said()? {
+                return Ok(true);
+            }
+        }
     }
 
     Ok(false)

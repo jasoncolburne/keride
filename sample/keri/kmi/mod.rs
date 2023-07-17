@@ -109,7 +109,7 @@ pub fn incept_partial(
         None,
     )?;
 
-    let sigers = ckeys.sign(&serder.raw(), None)?;
+    let sigers = ckeys.sign(&serder.raw())?;
     let endorsement = endorsement::endorse_serder(Some(&sigers), None, None, None)?;
     let event = message::messagize_serder(&serder, &endorsement, Some(true))?;
 
@@ -161,7 +161,7 @@ pub fn incept(
         None,
     )?;
 
-    let sigers = ckeys.sign(&serder.raw(), None)?;
+    let sigers = ckeys.sign(&serder.raw())?;
     let endorsement = endorsement::endorse_serder(Some(&sigers), None, None, None)?;
     let event = message::messagize_serder(&serder, &endorsement, Some(true))?;
 
@@ -297,8 +297,8 @@ pub fn rotate_partial(
     }
 
     if let Some(ckeys) = ckeys {
-        let mut sigers = ckeys.sign(&serder.raw(), None)?;
-        sigers.append(&mut skeys.sign(&serder.raw(), None)?);
+        let mut sigers = ckeys.sign(&serder.raw())?;
+        sigers.append(&mut skeys.sign(&serder.raw())?);
         let endorsement = endorsement::endorse_serder(Some(&sigers), None, None, None)?;
         let event = message::messagize_serder(&serder, &endorsement, Some(true))?;
 
@@ -351,7 +351,7 @@ pub fn rotate(
         None,
     )?;
 
-    let sigers = ckeys.sign(&serder.raw(), None)?;
+    let sigers = ckeys.sign(&serder.raw())?;
     let endorsement = endorsement::endorse_serder(Some(&sigers), None, None, None)?;
     let event = message::messagize_serder(&serder, &endorsement, Some(true))?;
 
@@ -366,7 +366,7 @@ pub(crate) fn interact(
     data: &Value,  // seals
 ) -> Result<(String, String)> {
     let serder = event::interact(pre, dig, Some(sn), Some(data), None, None)?;
-    let sigers = keys.sign(&serder.raw(), None)?;
+    let sigers = keys.sign(&serder.raw())?;
     let endorsement = endorsement::endorse_serder(Some(&sigers), None, None, None)?;
     let event = message::messagize_serder(&serder, &endorsement, Some(true))?;
 

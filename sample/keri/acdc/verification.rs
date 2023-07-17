@@ -2,37 +2,103 @@ use crate::error::{err, Error, Result};
 
 use cesride::{
     common::{Ids, Ilkage, Serialage},
-    Bext, Creder, Indexer, Matter, Sadder, Saider, Serder,
+    data::{dat, Value},
+    Creder, Matter, Sadder, Saider, Serder,
 };
-use parside::{message::AttachedMaterialQuadlets, CesrGroup, Group, MessageList};
+use parside::{message::SealSourceCouples, Group};
 
-use super::super::{kmi, KeriStore};
+use super::super::KeriStore;
 use super::schemer::cache as schema_cache;
 
-use std::collections::HashSet;
-
 const DEFAULT_CREDENTIAL_EXPIRY_SECONDS: i64 = 36000000000;
+
+pub(crate) fn chains_to_saids(chains: &Value) -> Result<Vec<String>> {
+    let chains = chains.clone();
+    let edges = if chains.to_map().is_ok() {
+        vec![chains]
+    } else if chains.to_vec().is_ok() {
+        chains.to_vec()?
+    } else {
+        return err!(Error::Verification);
+    };
+
+    let mut result = vec![];
+    for edge in &edges {
+        for (label, node) in edge.to_map()? {
+            if [Ids::d, "o"].contains(&label.as_str()) {
+                continue;
+            }
+
+            result.push(node["n"].to_string()?);
+        }
+    }
+
+    Ok(result)
+}
+
+pub(crate) fn acdc_status(store: &impl KeriStore, said: &str) -> Result<bool> {
+    let message = store.get_acdc(said)?;
+    let acdc = Creder::new_with_raw(message.as_bytes())?;
+
+    let vc = acdc.crd().to_map()?;
+    let prov = if vc.contains_key("e") {
+        let mut sad = store.get_sad(&vc["e"].to_string()?)?;
+        for (key, _) in sad.to_map()? {
+            if !["d", "o"].contains(&key.as_str()) {
+                sad[key.as_str()] = store.get_sad(&sad[key.as_str()].to_string()?)?;
+            }
+        }
+        sad
+    } else {
+        dat!({})
+    };
+
+    for edge in &chains_to_saids(&prov)? {
+        if !acdc_status(store, edge)? {
+            return Ok(false);
+        }
+    }
+
+    let event = store.get_latest_transaction_event(said)?;
+    let state = Serder::new_with_raw(event.as_bytes())?;
+
+    let dtnow = chrono::Utc::now();
+    let dte = chrono::DateTime::parse_from_rfc3339(&state.ked()["dt"].to_string()?)?
+        .with_timezone(&chrono::Utc);
+    if (dtnow - dte).num_seconds() > DEFAULT_CREDENTIAL_EXPIRY_SECONDS {
+        return err!(Error::Validation);
+    }
+
+    Ok(![Ilkage::rev, Ilkage::brv].contains(&state.ked()["t"].to_string()?.as_str()))
+}
 
 pub(crate) fn verify_acdc(
     store: &impl KeriStore,
     creder: &Creder,
-    quadlets: &AttachedMaterialQuadlets,
-    deep: Option<bool>,
-    verifying: Option<&mut HashSet<String>>,
-    _indent: usize,
+    seal_source_couples: &SealSourceCouples,
 ) -> Result<bool> {
-    let mut backing_set = HashSet::new();
-    let verifying = verifying.unwrap_or(&mut backing_set);
-
     if creder.status()?.is_none() {
         return err!(Error::Validation);
     };
 
-    let vcid = creder.said()?;
-    let schema = creder.schema()?;
-    let prov = creder.chains()?;
+    let (compacted, _) = super::compact_acdc(creder)?;
 
-    let saider = Saider::new_with_qb64(&vcid)?;
+    let vcid = compacted.said()?;
+    let schema = creder.schema()?;
+
+    let vc = creder.crd().to_map()?;
+    let prov = if vc.contains_key("e") {
+        let string_result = vc["e"].to_string();
+        if string_result.is_ok() {
+            store.get_sad(&string_result?)?
+        } else {
+            vc["e"].clone()
+        }
+    } else {
+        dat!({})
+    };
+
+    let saider = Saider::new_with_qb64(&creder.said()?)?;
     if !saider.verify(&creder.crd(), Some(false), Some(true), Some(Serialage::JSON), None, None)? {
         return err!(Error::Verification);
     }
@@ -46,28 +112,6 @@ pub(crate) fn verify_acdc(
         return err!(Error::Validation);
     }
 
-    if deep.unwrap_or(true) && !verifying.contains(&state.said()?) {
-        verifying.insert(state.said()?);
-
-        let (_, message_list) =
-            MessageList::from_stream_bytes(event[state.raw().len()..].as_bytes())?;
-        let group = message_list.messages[0].cesr_group()?;
-
-        match group {
-            CesrGroup::SealSourceCouplesVariant { value } => {
-                super::tel::verification::verify_transaction_event(
-                    store,
-                    &state,
-                    value,
-                    deep,
-                    Some(verifying),
-                    _indent + 2,
-                )?;
-            }
-            _ => return err!(Error::Decoding),
-        }
-    }
-
     // added brv here for safety even though unimplemented
     if [Ilkage::rev, Ilkage::brv].contains(&state.ked()[Ids::t].to_string()?.as_str()) {
         return err!(Error::Validation);
@@ -77,79 +121,25 @@ pub(crate) fn verify_acdc(
         return err!(Error::Validation);
     }
 
+    if seal_source_couples.value.len() != 1 {
+        return err!(Error::Decoding);
+    }
+    let source_saider = &seal_source_couples.value()[0].saider;
+    let source_seqner = &seal_source_couples.value()[0].seqner;
+
+    let key_event = store.get_key_event(&creder.issuer()?, source_seqner.sn()? as u32)?;
+    let serder = Serder::new_with_raw(key_event.as_bytes())?;
+
+    if source_saider.qb64()? != serder.said()? {
+        return err!(Error::Verification);
+    }
+
     let mut rooted = false;
 
-    for group in quadlets.value() {
-        match group {
-            CesrGroup::SadPathSigVariant { value } => {
-                for sad_path_sig in value.value() {
-                    if sad_path_sig.pather.bext()? != "-" {
-                        continue;
-                    }
-
-                    rooted = true;
-
-                    let event = store.get_key_event(
-                        &sad_path_sig.prefixer.qb64()?,
-                        sad_path_sig.seqner.sn()? as u32,
-                    )?;
-                    let serder = Serder::new_with_raw(event.as_bytes())?;
-                    if serder.said()? != sad_path_sig.saider.qb64()? {
-                        return err!(Error::Verification);
-                    }
-
-                    if deep.unwrap_or(true) && !verifying.contains(&serder.said()?) {
-                        verifying.insert(serder.said()?);
-
-                        let (_, message_list) =
-                            MessageList::from_stream_bytes(event[serder.raw().len()..].as_bytes())?;
-                        let group = message_list.messages[0].cesr_group()?;
-
-                        match group {
-                            CesrGroup::AttachedMaterialQuadletsVariant { value } => {
-                                kmi::verification::verify_key_event(
-                                    store,
-                                    &serder,
-                                    value,
-                                    deep,
-                                    Some(verifying),
-                                    _indent + 2,
-                                )?;
-                            }
-                            _ => return err!(Error::Decoding),
-                        }
-                    }
-
-                    let verfers = serder.verfers()?;
-                    let mut sigers = vec![];
-                    for controller_idx_sig in sad_path_sig.sigers.value() {
-                        let siger = &controller_idx_sig.siger;
-                        if !sigers.contains(siger) {
-                            sigers.push(siger.clone())
-                        }
-                    }
-
-                    let mut verified_indices = vec![];
-                    for siger in sigers {
-                        if siger.index() as usize > verfers.len() {
-                            return err!(Error::Verification);
-                        }
-
-                        if verfers[siger.index() as usize].verify(&siger.raw(), &creder.raw())? {
-                            verified_indices.push(siger.index());
-                        }
-                    }
-
-                    if let Some(tholder) = serder.tholder()? {
-                        if !tholder.satisfy(&verified_indices)? {
-                            return err!(Error::Verification);
-                        }
-                    } else {
-                        return err!(Error::Verification);
-                    }
-                }
-            }
-            _ => return err!(Error::Decoding),
+    let seals = serder.ked()["a"].to_vec()?;
+    for seal in &seals {
+        if seal["i"].to_string()? == vcid {
+            rooted = true;
         }
     }
 
@@ -170,6 +160,9 @@ pub(crate) fn verify_acdc(
             if [Ids::d, "o"].contains(&label.as_str()) {
                 continue;
             }
+
+            let node =
+                if node.to_string().is_ok() { store.get_sad(&node.to_string()?)? } else { node };
 
             let map = node.to_map()?;
 
@@ -212,7 +205,9 @@ pub(crate) fn verify_acdc(
             }
 
             // if we have nothing left, add defaults
-            let node_subject = pacdc.subject().to_map()?;
+            let subject_said = pacdc.crd()["a"].to_string()?;
+            let data = store.get_sad(&subject_said)?;
+            let node_subject = data.to_map()?;
             if operators.is_empty() {
                 if node_subject.contains_key(&"i".to_string()) {
                     operators.push("I2I".to_string());
@@ -238,20 +233,8 @@ pub(crate) fn verify_acdc(
                 _ => return err!(Error::Validation),
             }
 
-            // here we need to default to true
-            if deep.unwrap_or(true) && !verifying.contains(&node_said) {
-                verifying.insert(node_said);
-
-                let (_, message_list) =
-                    MessageList::from_stream_bytes(message[pacdc.raw().len()..].as_bytes())?;
-                let group = message_list.messages[0].cesr_group()?;
-
-                match group {
-                    CesrGroup::AttachedMaterialQuadletsVariant { value } => {
-                        verify_acdc(store, &pacdc, value, deep, Some(verifying), _indent + 2)?;
-                    }
-                    _ => return err!(Error::Decoding),
-                }
+            if !acdc_status(store, &node_said)? {
+                return err!(Error::Validation);
             }
         }
     }
@@ -267,9 +250,6 @@ pub(crate) fn verify_acdc(
             return err!(Error::Programmer);
         }
     }
-
-    // println!("successfully verified acdc {vcid}");
-    // println!("a {}{vcid}", ' '.to_string().repeat(_indent));
 
     Ok(existing)
 }

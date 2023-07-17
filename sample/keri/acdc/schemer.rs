@@ -74,7 +74,7 @@ impl SchemaCache {
             let value: serde_json::Value = serde_json::from_str(instance)?;
             match self.resolver().validate(&value, *loc) {
                 Ok(()) => Ok(true),
-                Err(_) => Ok(false),
+                Err(e) => err!(Error::SchemaValidation(e.to_string())),
             }
         } else {
             Ok(false)
@@ -283,12 +283,12 @@ mod test {
 
         assert!(cache()
             .verify(&schemers[0].said().unwrap(), "{\"d\":\"foo\",\"i\":\"bar\"}")
-            .unwrap());
-        assert!(!cache().verify(&schemers[0].said().unwrap(), "{\"i\":\"bar\"}").unwrap());
-        assert!(!cache().verify(&schemers[0].said().unwrap(), "{\"d\":\"foo\"}").unwrap());
-        assert!(!cache()
+            .is_ok());
+        assert!(cache().verify(&schemers[0].said().unwrap(), "{\"i\":\"bar\"}").is_err());
+        assert!(cache().verify(&schemers[0].said().unwrap(), "{\"d\":\"foo\"}").is_err());
+        assert!(cache()
             .verify(&schemers[0].said().unwrap(), "{\"d\":\"foo\",\"i\":\"bar\",\"j\":\"baz\"}")
-            .unwrap());
+            .is_err());
 
         let sed = dat!({
             "$id": "ELT1L3PG16r4RIloH_nDw_1O432xHrAW1oaH3NTbDQwu",

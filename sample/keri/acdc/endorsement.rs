@@ -1,6 +1,7 @@
 use crate::error::Result;
 use cesride::{counter, data::dat, Counter, Indexer, Matter, Pather, Seqner, Siger};
 
+#[allow(unused)]
 pub(crate) fn ratify_creder(
     prefix: &str,
     seqner: Seqner,

@@ -19,6 +19,7 @@ pub fn ingest_messages(
     messages: &str,
     deep: Option<bool>,
     verify: Option<bool>,
+    issuing: bool,
 ) -> Result<()> {
     let mut verifying = HashSet::new();
 
@@ -67,6 +68,7 @@ pub fn ingest_messages(
                                             &serder.pre()?,
                                             &(event + &group.qb64()?),
                                         )?;
+                                        // println!("ingested key event {}", serder.said()?);
                                     }
                                 }
                                 _ => return err!(Error::Decoding), // we only accept pipelined input at present
@@ -95,10 +97,42 @@ pub fn ingest_messages(
                                         &serder.pre()?,
                                         &(event + &group.qb64()?),
                                     )?;
+                                    // println!("ingested transaction event {}", serder.said()?);
                                 }
                             }
                             _ => return err!(Error::Decoding),
                         },
+                        // Ilkage::qry => match group {
+                        //     CesrGroup::SealSourceTriplesVariant { value: _ } => {
+                        //         // TODO: verify anchor
+                        //         let event = String::from_utf8(serder.raw())?;
+                        //         store.insert_exchange_event(&(event + &group.qb64()?))?;
+                        //         match serder.ked()["r"].to_string()?.as_str() {
+                        //             "process/sad/data" => {
+                        //                 store.insert_sad(&serder.ked()["a"].to_json()?)?;
+                        //             }
+                        //             "process/blinded/data" => {
+                        //                 store.insert_blinded_aggregate(&serder.ked()["a"])?;
+                        //             }
+                        //             _ => return err!(Error::Decoding),
+                        //         }
+                        //     }
+                        //     _ => return err!(Error::Decoding),
+                        // },
+                        // Ilkage::bar => match group {
+                        //     CesrGroup::SealSourceTriplesVariant { value: _ } => {
+                        //         match serder.ked()["r"].to_string()?.as_str() {
+                        //             "process/sealed/data" => {
+                        //                 for sad in &serder.ked()["a"].to_vec()? {
+                        //                     // TODO: verify we are allowed to save this data
+                        //                     store.insert_sad(&sad.to_json()?)?;
+                        //                 }
+                        //             }
+                        //             _ => return err!(Error::Decoding),
+                        //         }
+                        //     }
+                        //     _ => return err!(Error::Decoding),
+                        // },
                         _ => return err!(Error::Decoding),
                     }
                 } else {
@@ -106,30 +140,32 @@ pub fn ingest_messages(
                 }
             } else if result.ident == Identage::ACDC {
                 let creder = Creder::new_with_raw(raw_message)?;
-                let said = creder.said()?;
+                let (cred, sads) = super::acdc::compact_acdc(&creder)?;
+                // let cred = Creder::new_with_ked(&acdc, Some(&creder.code()), Some(&creder.kind()))?;
+
+                let said = cred.said()?;
 
                 let message = messages.next();
                 if let Some(message) = message {
                     let group = message.cesr_group()?;
                     match group {
-                        CesrGroup::AttachedMaterialQuadletsVariant { value } => {
+                        CesrGroup::SealSourceCouplesVariant { value } => {
                             let existing = if verify.unwrap_or(true) && !verifying.contains(&said) {
-                                verifying.insert(said);
-                                acdc::verification::verify_acdc(
-                                    store,
-                                    &creder,
-                                    value,
-                                    deep,
-                                    Some(&mut verifying),
-                                    0,
-                                )?
+                                verifying.insert(said.clone());
+                                acdc::verification::verify_acdc(store, &creder, value)?
                             } else {
                                 seen_said(store, &said)
                             };
 
                             if !existing {
-                                let acdc = String::from_utf8(creder.raw())?;
-                                store.insert_acdc(&(acdc + &group.qb64()?))?;
+                                store.insert_acdc(
+                                    &(cred.crd().to_json()? + &group.qb64()?),
+                                    issuing,
+                                )?;
+                                for sad in &sads {
+                                    store.insert_sad(&sad.to_json()?)?;
+                                }
+                                // println!("ingested acdc {}: {}", said, cred.crd().to_json()?);
                             }
                         }
                         _ => return err!(Error::Decoding), // we only accept pipelined input at present

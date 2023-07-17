@@ -17,9 +17,10 @@ pub(crate) fn create(
     status: Option<&str>,
     source: Option<&Value>,
     rules: Option<&Value>,
+    partially_disclosable: Option<&Value>,
     version: Option<&Version>,
     kind: Option<&str>,
-) -> Result<Creder> {
+) -> Result<(Creder, Vec<Value>)> {
     let private = private.unwrap_or(false);
     let version = version.unwrap_or(CURRENT_VERSION);
     let kind = kind.unwrap_or(Serialage::JSON);
@@ -73,18 +74,41 @@ pub(crate) fn create(
     vc["s"] = dat!(schema);
     vc["a"] = dat!({});
 
+    let mut sads = vec![];
+
     if let Some(source) = source {
-        vc["e"] = source.clone();
+        let (edges, _) = super::compact_sad(&mut source.clone(), &mut sads)?;
+        vc["e"] = edges["d"].clone();
+        sads.push(edges);
     }
 
     if let Some(rules) = rules {
-        vc["r"] = rules.clone();
+        let (rules, _) = super::compact_sad(&mut rules.clone(), &mut sads)?;
+        vc["r"] = rules["d"].clone();
+        sads.push(rules);
     }
 
-    let (_, sad) = Saider::saidify(&subject, None, Some(kind), Some(Ids::d), None)?;
-    vc["a"] = sad;
+    if let Some(partially_disclosable) = partially_disclosable {
+        let map = partially_disclosable.to_map()?;
 
-    let (_, vc) = Saider::saidify(&vc, None, None, None, None)?;
+        for (key, value) in &map {
+            let sad = dat!({
+                "d": "",
+                "u": &Salter::new_with_defaults(Some(Tierage::low))?.qb64()?,
+                "value": value.clone()
+            });
 
-    Creder::new_with_ked(&vc, None, None)
+            let (_, sad) = Saider::saidify(&sad, None, Some(kind), Some(Ids::d), None)?;
+            subject[key.as_str()] = sad;
+        }
+    }
+
+    let (sad, _) = super::compact_sad(&mut subject.clone(), &mut sads)?;
+    vc["a"] = sad["d"].clone();
+    sads.push(sad);
+
+    let (_, vc) = Saider::saidify(&vc, None, Some(kind), Some(Ids::d), None)?;
+    let creder = Creder::new_with_ked(&vc, None, None)?;
+
+    Ok((creder, sads))
 }
